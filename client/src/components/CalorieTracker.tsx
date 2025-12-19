@@ -5,6 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Apple, Loader2, Sparkles } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface CalorieResult {
   totalCalories: number;
@@ -16,27 +19,47 @@ interface CalorieResult {
 
 export default function CalorieTracker() {
   const [mealDescription, setMealDescription] = useState("");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<CalorieResult | null>(null);
+  const { toast } = useToast();
+
+  const analyzeMutation = useMutation({
+    mutationFn: async (description: string) => {
+      const response = await apiRequest("POST", "/api/calories/analyze", { mealDescription: description });
+      return response.json();
+    },
+    onSuccess: (data: CalorieResult) => {
+      setResult(data);
+    }
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!result) return;
+      const response = await apiRequest("POST", "/api/meals/log", {
+        mealDescription,
+        totalCalories: result.totalCalories,
+        protein: result.protein,
+        carbs: result.carbs,
+        fats: result.fats,
+        aiAnalysis: result.analysis
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Meal Saved",
+        description: "Your meal has been logged to history."
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/meals/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats/dashboard"] });
+      setMealDescription("");
+      setResult(null);
+    }
+  });
 
   const handleAnalyzeMeal = () => {
     if (!mealDescription.trim()) return;
-    
-    setIsAnalyzing(true);
-    console.log("Analyzing meal:", mealDescription);
-    
-    setTimeout(() => {
-      const mockResult: CalorieResult = {
-        totalCalories: 650,
-        protein: 35,
-        carbs: 45,
-        fats: 20,
-        analysis: "Your meal contains a balanced mix of nutrients. The grilled chicken provides quality protein for muscle recovery, while the vegetables offer essential vitamins and fiber. Consider adding a small portion of healthy fats like avocado for sustained energy."
-      };
-      
-      setResult(mockResult);
-      setIsAnalyzing(false);
-    }, 2000);
+    analyzeMutation.mutate(mealDescription);
   };
 
   const getTotalMacros = () => {
@@ -73,10 +96,10 @@ export default function CalorieTracker() {
         <Button
           onClick={handleAnalyzeMeal}
           className="w-full"
-          disabled={!mealDescription.trim() || isAnalyzing}
+          disabled={!mealDescription.trim() || analyzeMutation.isPending}
           data-testid="button-analyze-meal"
         >
-          {isAnalyzing ? (
+          {analyzeMutation.isPending ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               AI is analyzing nutrition...
@@ -104,11 +127,11 @@ export default function CalorieTracker() {
                 <div className="flex justify-between mb-2">
                   <span className="text-sm font-medium">Protein</span>
                   <span className="text-sm text-muted-foreground" data-testid="text-protein">
-                    {result.protein}g ({Math.round((result.protein / getTotalMacros()) * 100)}%)
+                    {result.protein}g ({Math.round((result.protein / getTotalMacros()) * 100) || 0}%)
                   </span>
                 </div>
                 <Progress 
-                  value={(result.protein / getTotalMacros()) * 100} 
+                  value={(result.protein / getTotalMacros()) * 100 || 0} 
                   className="h-2 bg-muted"
                   data-testid="progress-protein"
                 />
@@ -118,11 +141,11 @@ export default function CalorieTracker() {
                 <div className="flex justify-between mb-2">
                   <span className="text-sm font-medium">Carbohydrates</span>
                   <span className="text-sm text-muted-foreground" data-testid="text-carbs">
-                    {result.carbs}g ({Math.round((result.carbs / getTotalMacros()) * 100)}%)
+                    {result.carbs}g ({Math.round((result.carbs / getTotalMacros()) * 100) || 0}%)
                   </span>
                 </div>
                 <Progress 
-                  value={(result.carbs / getTotalMacros()) * 100} 
+                  value={(result.carbs / getTotalMacros()) * 100 || 0} 
                   className="h-2 bg-muted"
                   data-testid="progress-carbs"
                 />
@@ -132,11 +155,11 @@ export default function CalorieTracker() {
                 <div className="flex justify-between mb-2">
                   <span className="text-sm font-medium">Fats</span>
                   <span className="text-sm text-muted-foreground" data-testid="text-fats">
-                    {result.fats}g ({Math.round((result.fats / getTotalMacros()) * 100)}%)
+                    {result.fats}g ({Math.round((result.fats / getTotalMacros()) * 100) || 0}%)
                   </span>
                 </div>
                 <Progress 
-                  value={(result.fats / getTotalMacros()) * 100} 
+                  value={(result.fats / getTotalMacros()) * 100 || 0} 
                   className="h-2 bg-muted"
                   data-testid="progress-fats"
                 />
@@ -160,15 +183,22 @@ export default function CalorieTracker() {
             <Button
               variant="secondary"
               className="w-full"
-              onClick={() => {
-                console.log("Meal saved to history");
-                setMealDescription("");
-                setResult(null);
-              }}
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
               data-testid="button-save-meal"
             >
-              Save to History
+              {saveMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Save to History"
+              )}
             </Button>
+          </div>
+        )}
+
+        {analyzeMutation.isError && (
+          <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
+            Failed to analyze meal. Please try again.
           </div>
         )}
       </CardContent>

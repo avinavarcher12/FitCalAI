@@ -1,18 +1,43 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Flame, TrendingUp } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
+
+interface DashboardData {
+  bmi: { value: number; category: string } | null;
+  weeklyCalories: number;
+  avgDailyCalories: number;
+  workoutsThisWeek: number;
+}
 
 interface StatCardProps {
   title: string;
   value: string;
   subtitle: string;
   icon: typeof Activity;
-  trend?: string;
+  trend?: boolean;
+  isLoading?: boolean;
 }
 
-function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCardProps) {
+function StatCard({ title, value, subtitle, icon: Icon, trend, isLoading }: StatCardProps) {
+  if (isLoading) {
+    return (
+      <Card className="hover-elevate">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-5 w-5 rounded" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-8 w-16 mb-2" />
+          <Skeleton className="h-3 w-20" />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="hover-elevate">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
@@ -36,35 +61,39 @@ function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCardProps) 
 }
 
 export default function DashboardStats() {
-  //todo: remove mock functionality
+  const { data, isLoading } = useQuery<DashboardData>({
+    queryKey: ["/api/stats/dashboard"],
+    refetchInterval: 30000
+  });
+
   const stats = [
     {
       title: "BMI Status",
-      value: "22.4",
-      subtitle: "Normal range",
+      value: data?.bmi?.value?.toString() || "—",
+      subtitle: data?.bmi?.category || "Not calculated yet",
       icon: Activity,
-      trend: "stable"
+      trend: !!data?.bmi
     },
     {
       title: "Weekly Calories",
-      value: "12,450",
-      subtitle: "Avg 1,779/day",
+      value: data?.weeklyCalories?.toLocaleString() || "0",
+      subtitle: `Avg ${data?.avgDailyCalories || 0}/day`,
       icon: Flame,
-      trend: "up"
+      trend: (data?.weeklyCalories || 0) > 0
     },
     {
       title: "Workouts",
-      value: "5/7",
+      value: `${data?.workoutsThisWeek || 0}/7`,
       subtitle: "This week",
       icon: Activity,
-      trend: "up"
+      trend: (data?.workoutsThisWeek || 0) > 0
     }
   ];
 
   return (
     <div id="features" className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {stats.map((stat) => (
-        <StatCard key={stat.title} {...stat} />
+        <StatCard key={stat.title} {...stat} isLoading={isLoading} />
       ))}
     </div>
   );

@@ -5,12 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Calculator, TrendingUp } from "lucide-react";
+import { Calculator, TrendingUp, Loader2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 interface BMIResult {
   bmi: number;
   category: string;
-  color: string;
+  recommendation: string;
 }
 
 export default function BMICalculator() {
@@ -20,32 +22,28 @@ export default function BMICalculator() {
   const [gender, setGender] = useState("");
   const [result, setResult] = useState<BMIResult | null>(null);
 
-  const calculateBMI = () => {
-    const heightInMeters = parseFloat(height) / 100;
-    const weightInKg = parseFloat(weight);
-    
-    if (heightInMeters && weightInKg) {
-      const bmi = weightInKg / (heightInMeters * heightInMeters);
-      
-      let category = "";
-      let color = "";
-      
-      if (bmi < 18.5) {
-        category = "Underweight";
-        color = "text-chart-2";
-      } else if (bmi < 25) {
-        category = "Normal";
-        color = "text-chart-1";
-      } else if (bmi < 30) {
-        category = "Overweight";
-        color = "text-chart-5";
-      } else {
-        category = "Obese";
-        color = "text-destructive";
-      }
-      
-      setResult({ bmi: parseFloat(bmi.toFixed(1)), category, color });
-      console.log("BMI calculated:", { bmi, category });
+  const analyzeMutation = useMutation({
+    mutationFn: async (data: { height: string; weight: string; age: string; gender: string }) => {
+      const response = await apiRequest("POST", "/api/bmi/analyze", data);
+      return response.json();
+    },
+    onSuccess: (data: BMIResult) => {
+      setResult(data);
+    }
+  });
+
+  const handleCalculate = () => {
+    if (!height || !weight) return;
+    analyzeMutation.mutate({ height, weight, age, gender });
+  };
+
+  const getColorClass = (category: string) => {
+    switch (category) {
+      case "Underweight": return "text-chart-2";
+      case "Normal": return "text-chart-1";
+      case "Overweight": return "text-chart-5";
+      case "Obese": return "text-destructive";
+      default: return "text-foreground";
     }
   };
 
@@ -62,7 +60,7 @@ export default function BMICalculator() {
           <CardTitle className="text-2xl">BMI Calculator</CardTitle>
         </div>
         <CardDescription>
-          Calculate your Body Mass Index and get instant health insights
+          Calculate your Body Mass Index and get AI-powered health insights
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -119,12 +117,19 @@ export default function BMICalculator() {
         </div>
         
         <Button
-          onClick={calculateBMI}
+          onClick={handleCalculate}
           className="w-full"
-          disabled={!height || !weight}
+          disabled={!height || !weight || analyzeMutation.isPending}
           data-testid="button-calculate-bmi"
         >
-          Calculate BMI
+          {analyzeMutation.isPending ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              AI is analyzing...
+            </>
+          ) : (
+            "Calculate BMI"
+          )}
         </Button>
         
         {result && (
@@ -132,13 +137,13 @@ export default function BMICalculator() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Your BMI</p>
-                <p className={`text-4xl font-medium ${result.color}`} data-testid="text-bmi-result">
+                <p className={`text-4xl font-medium ${getColorClass(result.category)}`} data-testid="text-bmi-result">
                   {result.bmi}
                 </p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-muted-foreground">Category</p>
-                <p className={`text-xl font-medium ${result.color}`} data-testid="text-bmi-category">
+                <p className={`text-xl font-medium ${getColorClass(result.category)}`} data-testid="text-bmi-category">
                   {result.category}
                 </p>
               </div>
@@ -155,17 +160,20 @@ export default function BMICalculator() {
             </div>
             
             <div className="flex items-start gap-2 p-4 bg-accent rounded-md">
-              <TrendingUp className="w-5 h-5 text-accent-foreground mt-0.5" />
+              <TrendingUp className="w-5 h-5 text-accent-foreground mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-accent-foreground">Health Insight</p>
-                <p className="text-sm text-accent-foreground/80">
-                  {result.bmi < 18.5 && "Consider consulting with a nutritionist to develop a healthy weight gain plan."}
-                  {result.bmi >= 18.5 && result.bmi < 25 && "Great job! Maintain your healthy lifestyle with regular exercise and balanced nutrition."}
-                  {result.bmi >= 25 && result.bmi < 30 && "Consider incorporating more physical activity and balanced meals into your routine."}
-                  {result.bmi >= 30 && "We recommend consulting with a healthcare professional for personalized guidance."}
+                <p className="text-sm font-medium text-accent-foreground">AI Health Insight</p>
+                <p className="text-sm text-accent-foreground/80" data-testid="text-ai-recommendation">
+                  {result.recommendation}
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {analyzeMutation.isError && (
+          <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
+            Failed to analyze BMI. Please try again.
           </div>
         )}
       </CardContent>

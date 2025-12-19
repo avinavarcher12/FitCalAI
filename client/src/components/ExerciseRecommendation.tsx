@@ -5,70 +5,57 @@ import { Badge } from "@/components/ui/badge";
 import { Dumbbell, Heart, Zap, Target, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface Exercise {
-  id: string;
   name: string;
   duration: string;
   difficulty: "beginner" | "intermediate" | "advanced";
   type: "cardio" | "strength" | "flexibility";
-  icon: typeof Heart;
   description: string;
 }
 
 export default function ExerciseRecommendation() {
   const [fitnessLevel, setFitnessLevel] = useState("");
   const [goal, setGoal] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const { toast } = useToast();
+
+  const recommendMutation = useMutation({
+    mutationFn: async (data: { fitnessLevel: string; goal: string }) => {
+      const response = await apiRequest("POST", "/api/exercises/recommend", data);
+      return response.json();
+    },
+    onSuccess: (data: Exercise[]) => {
+      setExercises(data);
+    }
+  });
+
+  const logMutation = useMutation({
+    mutationFn: async (exercise: Exercise) => {
+      const response = await apiRequest("POST", "/api/exercises/log", {
+        exerciseName: exercise.name,
+        duration: exercise.duration,
+        difficulty: exercise.difficulty,
+        exerciseType: exercise.type
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Exercise Logged",
+        description: "Your workout has been saved to history."
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/exercises/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats/dashboard"] });
+    }
+  });
 
   const handleGetRecommendations = () => {
-    setIsLoading(true);
-    console.log("Getting AI recommendations for:", { fitnessLevel, goal });
-    
-    setTimeout(() => {
-      const mockExercises: Exercise[] = [
-        {
-          id: "1",
-          name: "Brisk Walking",
-          duration: "30 mins",
-          difficulty: "beginner",
-          type: "cardio",
-          icon: Heart,
-          description: "Start with a comfortable pace to boost your cardiovascular health and burn calories."
-        },
-        {
-          id: "2",
-          name: "Bodyweight Squats",
-          duration: "3 sets of 12",
-          difficulty: "beginner",
-          type: "strength",
-          icon: Dumbbell,
-          description: "Build leg strength and improve your metabolism with this fundamental exercise."
-        },
-        {
-          id: "3",
-          name: "Yoga Flow",
-          duration: "20 mins",
-          difficulty: "beginner",
-          type: "flexibility",
-          icon: Zap,
-          description: "Enhance flexibility and reduce stress with guided stretching sequences."
-        },
-        {
-          id: "4",
-          name: "Push-ups",
-          duration: "3 sets of 10",
-          difficulty: "intermediate",
-          type: "strength",
-          icon: Dumbbell,
-          description: "Strengthen your upper body and core muscles with proper form."
-        }
-      ];
-      
-      setExercises(mockExercises);
-      setIsLoading(false);
-    }, 1500);
+    if (!fitnessLevel || !goal) return;
+    recommendMutation.mutate({ fitnessLevel, goal });
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -80,6 +67,15 @@ export default function ExerciseRecommendation() {
     }
   };
 
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case "cardio": return Heart;
+      case "strength": return Dumbbell;
+      case "flexibility": return Zap;
+      default: return Dumbbell;
+    }
+  };
+
   return (
     <Card id="exercises" className="w-full">
       <CardHeader>
@@ -88,7 +84,7 @@ export default function ExerciseRecommendation() {
           <CardTitle className="text-2xl">AI Exercise Recommendations</CardTitle>
         </div>
         <CardDescription>
-          Get personalized workout suggestions based on your fitness level and goals
+          Get personalized workout suggestions powered by AI based on your fitness level and goals
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -126,13 +122,13 @@ export default function ExerciseRecommendation() {
         <Button
           onClick={handleGetRecommendations}
           className="w-full"
-          disabled={!fitnessLevel || !goal || isLoading}
+          disabled={!fitnessLevel || !goal || recommendMutation.isPending}
           data-testid="button-get-recommendations"
         >
-          {isLoading ? (
+          {recommendMutation.isPending ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              AI is analyzing...
+              AI is generating recommendations...
             </>
           ) : (
             "Get AI Recommendations"
@@ -141,10 +137,10 @@ export default function ExerciseRecommendation() {
         
         {exercises.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {exercises.map((exercise) => {
-              const Icon = exercise.icon;
+            {exercises.map((exercise, index) => {
+              const Icon = getTypeIcon(exercise.type);
               return (
-                <Card key={exercise.id} className="hover-elevate" data-testid={`card-exercise-${exercise.id}`}>
+                <Card key={index} className="hover-elevate" data-testid={`card-exercise-${index}`}>
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -172,15 +168,26 @@ export default function ExerciseRecommendation() {
                       size="sm"
                       variant="secondary"
                       className="w-full mt-2"
-                      onClick={() => console.log("Log exercise:", exercise.name)}
-                      data-testid={`button-log-${exercise.id}`}
+                      onClick={() => logMutation.mutate(exercise)}
+                      disabled={logMutation.isPending}
+                      data-testid={`button-log-${index}`}
                     >
-                      Log This Exercise
+                      {logMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        "Log This Exercise"
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
               );
             })}
+          </div>
+        )}
+
+        {recommendMutation.isError && (
+          <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
+            Failed to get recommendations. Please try again.
           </div>
         )}
       </CardContent>
