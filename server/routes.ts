@@ -47,7 +47,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(records);
     } catch (error) {
       console.error("Error fetching BMI history:", error);
-      res.status(500).json({ error: "Failed to fetch BMI history" });
+      res.status(500).json({ error: "Failed to fetch BMI history", details: (error as Error).message });
     }
   });
 
@@ -146,11 +146,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard stats
   app.get("/api/stats/dashboard", async (req, res) => {
     try {
-      const [latestBmi, exerciseLogs, mealLogs] = await Promise.all([
-        storage.getLatestBmiRecord(),
-        storage.getExerciseLogs(7),
-        storage.getMealLogs(7)
-      ]);
+      const latestBmi = await storage.getLatestBmiRecord();
+      const exerciseLogs = await storage.getExerciseLogs(7);
+      const mealLogs = await storage.getMealLogs(7);
 
       const totalCalories = mealLogs.reduce((sum, meal) => sum + (meal.totalCalories || 0), 0);
       const avgCalories = mealLogs.length > 0 ? Math.round(totalCalories / mealLogs.length) : 0;
@@ -168,7 +166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
-      res.status(500).json({ error: "Failed to fetch dashboard stats" });
+      res.status(500).json({ error: "Failed to fetch dashboard stats", details: (error as Error).message });
     }
   });
 

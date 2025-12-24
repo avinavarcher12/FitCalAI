@@ -1,11 +1,10 @@
-import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import {
-  users, type User, type InsertUser,
-  userProfiles, type UserProfile, type InsertUserProfile,
-  exerciseLogs, type ExerciseLog, type InsertExerciseLog,
-  mealLogs, type MealLog, type InsertMealLog,
-  bmiRecords, type BmiRecord, type InsertBmiRecord
+  type User, type InsertUser,
+  type UserProfile, type InsertUserProfile,
+  type ExerciseLog, type InsertExerciseLog,
+  type MealLog, type InsertMealLog,
+  type BmiRecord, type InsertBmiRecord
 } from "@shared/schema";
 
 export interface IStorage {
@@ -27,71 +26,110 @@ export interface IStorage {
   getLatestBmiRecord(): Promise<BmiRecord | undefined>;
 }
 
-export class DatabaseStorage implements IStorage {
+export class MemStorage implements IStorage {
+  private users: Map<string, User> = new Map();
+  private userProfiles: Map<string, UserProfile> = new Map();
+  private exerciseLogs: ExerciseLog[] = [];
+  private mealLogs: MealLog[] = [];
+  private bmiRecords: BmiRecord[] = [];
+
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return this.users.get(id);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    return Array.from(this.users.values()).find(u => u.username === username);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const id = randomUUID();
+    const user: User = { ...insertUser, id };
+    this.users.set(id, user);
     return user;
   }
 
   async getUserProfile(): Promise<UserProfile | undefined> {
-    const [profile] = await db.select().from(userProfiles).limit(1);
-    return profile;
+    return Array.from(this.userProfiles.values())[0];
   }
 
   async saveUserProfile(profile: InsertUserProfile): Promise<UserProfile> {
     const existing = await this.getUserProfile();
-    if (existing) {
-      const [updated] = await db.update(userProfiles)
-        .set(profile)
-        .where(eq(userProfiles.id, existing.id))
-        .returning();
-      return updated;
-    }
-    const [created] = await db.insert(userProfiles).values(profile).returning();
-    return created;
+    const id = existing?.id || randomUUID();
+    const userProfile: UserProfile = { 
+      id,
+      height: profile.height ?? null,
+      weight: profile.weight ?? null,
+      age: profile.age ?? null,
+      gender: profile.gender ?? null,
+      fitnessLevel: profile.fitnessLevel ?? null,
+      fitnessGoal: profile.fitnessGoal ?? null
+    };
+    this.userProfiles.set(id, userProfile);
+    return userProfile;
   }
 
   async getExerciseLogs(limit = 20): Promise<ExerciseLog[]> {
-    return db.select().from(exerciseLogs).orderBy(desc(exerciseLogs.loggedAt)).limit(limit);
+    return this.exerciseLogs.slice(0, limit);
   }
 
   async createExerciseLog(log: InsertExerciseLog): Promise<ExerciseLog> {
-    const [created] = await db.insert(exerciseLogs).values(log).returning();
-    return created;
+    const id = randomUUID();
+    const exerciseLog: ExerciseLog = { 
+      id,
+      exerciseName: log.exerciseName,
+      duration: log.duration,
+      difficulty: log.difficulty ?? null,
+      exerciseType: log.exerciseType ?? null,
+      loggedAt: new Date()
+    };
+    this.exerciseLogs.unshift(exerciseLog);
+    return exerciseLog;
   }
 
   async getMealLogs(limit = 20): Promise<MealLog[]> {
-    return db.select().from(mealLogs).orderBy(desc(mealLogs.loggedAt)).limit(limit);
+    return this.mealLogs.slice(0, limit);
   }
 
   async createMealLog(log: InsertMealLog): Promise<MealLog> {
-    const [created] = await db.insert(mealLogs).values(log).returning();
-    return created;
+    const id = randomUUID();
+    const mealLog: MealLog = { 
+      id,
+      mealDescription: log.mealDescription,
+      totalCalories: log.totalCalories,
+      protein: log.protein ?? null,
+      carbs: log.carbs ?? null,
+      fats: log.fats ?? null,
+      aiAnalysis: log.aiAnalysis ?? null,
+      loggedAt: new Date()
+    };
+    this.mealLogs.unshift(mealLog);
+    return mealLog;
   }
 
   async getBmiRecords(limit = 10): Promise<BmiRecord[]> {
-    return db.select().from(bmiRecords).orderBy(desc(bmiRecords.recordedAt)).limit(limit);
+    return this.bmiRecords.slice(0, limit);
   }
 
   async createBmiRecord(record: InsertBmiRecord): Promise<BmiRecord> {
-    const [created] = await db.insert(bmiRecords).values(record).returning();
-    return created;
+    const id = randomUUID();
+    const bmiRecord: BmiRecord = { 
+      id,
+      height: record.height,
+      weight: record.weight,
+      age: record.age ?? null,
+      gender: record.gender ?? null,
+      bmiValue: record.bmiValue,
+      category: record.category,
+      aiRecommendation: record.aiRecommendation ?? null,
+      recordedAt: new Date()
+    };
+    this.bmiRecords.unshift(bmiRecord);
+    return bmiRecord;
   }
 
   async getLatestBmiRecord(): Promise<BmiRecord | undefined> {
-    const [record] = await db.select().from(bmiRecords).orderBy(desc(bmiRecords.recordedAt)).limit(1);
-    return record;
+    return this.bmiRecords[0];
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new MemStorage();
