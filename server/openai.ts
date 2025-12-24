@@ -75,16 +75,26 @@ export async function getExerciseRecommendations(
     messages: [
       {
         role: "system",
-        content: `You are an expert personal trainer. Generate 4 personalized exercise recommendations based on the user's fitness level and goals. 
-        Respond with JSON in this format: { "exercises": [{ "name": "string", "duration": "string (e.g., '30 mins' or '3 sets of 12')", "difficulty": "beginner|intermediate|advanced", "type": "cardio|strength|flexibility", "description": "string (2-3 sentences explaining benefits)" }] }`
+        content: `You are an expert personal trainer. Generate 8 diverse, personalized exercise recommendations based on the user's fitness level and goals. 
+        Include a mix of cardio, strength, and flexibility exercises appropriate for their level.
+        Respond with JSON in this format: { "exercises": [{ "name": "string", "duration": "string (e.g., '30 mins' or '3 sets of 12')", "difficulty": "beginner|intermediate|advanced", "type": "cardio|strength|flexibility", "description": "string (2-3 sentences explaining benefits and proper form)" }] }
+        Make sure to include:
+        - 2-3 cardio exercises
+        - 2-3 strength exercises
+        - 2-3 flexibility exercises
+        All should match the user's fitness level and help achieve their specific goal.`
       },
       {
         role: "user",
-        content: `Create personalized exercises for someone with fitness level: ${fitnessLevel}, goal: ${goal}${bmi ? `, BMI: ${bmi}` : ""}. Focus on exercises that help achieve their specific goal.`
+        content: `Create 8 diverse exercise recommendations for someone with:
+        - Fitness level: ${fitnessLevel}
+        - Goal: ${goal}${bmi ? `\n- BMI: ${bmi}` : ""}
+        
+        Make exercises practical, safe, and progressively appropriate for their level. Include variety across cardio, strength, and flexibility.`
       }
     ],
     response_format: { type: "json_object" },
-    max_completion_tokens: 1024
+    max_completion_tokens: 2000
   });
 
   const result = JSON.parse(response.choices[0].message.content || "{}");
