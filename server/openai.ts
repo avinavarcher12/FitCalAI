@@ -4,11 +4,11 @@ import OpenAI from "openai";
 const apiKey = process.env.OPENAI_API_KEY;
 
 if (!apiKey) {
-  console.error("Warning: OPENAI_API_KEY is not set. AI features will not work.");
+  throw new Error("OPENAI_API_KEY is not set. Please provide it in the secrets tab.");
 }
 
 const openai = new OpenAI({ 
-  apiKey: apiKey || "sk-dummy-key-for-development"
+  apiKey: apiKey
 });
 
 export interface BMIAnalysis {
